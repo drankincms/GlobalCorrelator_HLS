@@ -81,7 +81,7 @@ void ptsort_ref(T in[NIn], T out[NOut]) {
 }
 
 
-void pfalgo3_em_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkObj track[NTRACK], bool isEle[NTRACK], bool isMu[NTRACK], PFNeutralObj outpho[NPHOTON], HadCaloObj hadcalo_out[NCALO]) {
+void pfalgo3_em_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkObj track[NTRACK], bool isEle[NTRACK], bool isMu[NTRACK], PFNeutralObj outpho[NPHOTON], HadCaloObj hadcalo_out[NCALO], pt_t calomatch_pt[NTRACK]) {
     // constants
     const int DR2MAX_TE = PFALGO3_DR2MAX_TK_EM;
     const int DR2MAX_EH = PFALGO3_DR2MAX_EM_CALO;
@@ -146,6 +146,7 @@ void pfalgo3_em_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkObj 
 
     for (int it = 0; it < NTRACK; ++it) {
         isEle[it] = (tk2em[it] != -1) && isEM[tk2em[it]];
+        calomatch_pt[it] = emcalo[tk2em[it]].hwPt;
         if (g_debug_ && isEle[it]) printf("FW  \t track  %3d pt %7d flagged as electron.\n", it, int(track[it].hwPt));
     }
 
@@ -268,7 +269,8 @@ void pfalgo3_full_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkOb
     // TK-EM Linking
     bool isEle[NTRACK];
     HadCaloObj hadcalo_subem[NCALO];
-    pfalgo3_em_ref(emcalo, hadcalo, track, isEle, isMu, outpho, hadcalo_subem);
+    pt_t calomatch_pt[NTRACK];
+    pfalgo3_em_ref(emcalo, hadcalo, track, isEle, isMu, outpho, hadcalo_subem, calomatch_pt);
 
     ////////////////////////////////////////////////////
     // TK-HAD Linking
@@ -280,8 +282,10 @@ void pfalgo3_full_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkOb
 
     // initialize good track bit
     bool track_good[NTRACK];
+    bool track_calo_good[NTRACK];
     for (int it = 0; it < NTRACK; ++it) { 
         track_good[it] = (track[it].hwPt < (track[it].hwTightQuality ? TKPT_MAX_TIGHT : TKPT_MAX_LOOSE) || isEle[it] || isMu[it]); 
+        track_calo_good[it] = isEle[it]; 
     }
 
     // initialize output
@@ -296,6 +300,8 @@ void pfalgo3_full_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkOb
             if (ibest != -1) {
                 if (g_debug_) printf("FW  \t track  %3d pt %7d matched to calo' %3d pt %7d\n", it, int(track[it].hwPt), ibest, int(hadcalo_subem[ibest].hwPt));
                 track_good[it] = 1;
+                track_calo_good[it] = 1;
+                calomatch_pt[it] = hadcalo_subem[ibest].hwPt;
                 calo_sumtk[ibest]    += track[it].hwPt;
                 calo_sumtkErr2[ibest] += sqr(track[it].hwPtErr);
             }
@@ -328,8 +334,15 @@ void pfalgo3_full_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkOb
 
     // copy out charged hadrons
     for (int it = 0; it < NTRACK; ++it) {
-        if (track_good[it]) {
+        if ((track_good[it] && !track_calo_good[it]) || (track_calo_good[it] && calomatch_pt[it]<=TRK_CALO_SWITCH)) {
             outch[it].hwPt = track[it].hwPt;
+            outch[it].hwEta = track[it].hwEta;
+            outch[it].hwPhi = track[it].hwPhi;
+            outch[it].hwZ0 = track[it].hwZ0;
+            outch[it].hwId  = isEle[it] ? PID_Electron : (isMu[it] ? PID_Muon : PID_Charged);
+        }
+        else if (track_calo_good[it] && calomatch_pt[it]>TRK_CALO_SWITCH) {
+            outch[it].hwPt = calomatch_pt[it];
             outch[it].hwEta = track[it].hwEta;
             outch[it].hwPhi = track[it].hwPhi;
             outch[it].hwZ0 = track[it].hwZ0;

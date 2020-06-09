@@ -24,6 +24,8 @@ void mp7wrapped_pfalgo3_full(MP7DataWord input[MP7_NCHANN], MP7DataWord output[M
 
 #endif
 
+#define TRK_CALO_SWITCH 600 //150 GeV * 4 (scale)
+
 #ifndef DRVALSET
 #define DRVALSET
 //#define PFALGO3_DR2MAX_TK_CALO 756
