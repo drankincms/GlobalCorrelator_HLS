@@ -81,14 +81,15 @@ void ptsort_ref(T in[NIn], T out[NOut]) {
 }
 
 
-void pfalgo3_em_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkObj track[NTRACK], bool isEle[NTRACK], bool isMu[NTRACK], PFNeutralObj outpho[NPHOTON], HadCaloObj hadcalo_out[NCALO], pt_t calomatch_pt[NTRACK]) {
+void pfalgo3_em_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkObj track[NTRACK], bool isEle[NTRACK], bool isMu[NTRACK], PFNeutralObj outpho[NPHOTON], HadCaloObj hadcalo_out[NCALO], pt_t calomatch_pt[NTRACK], pt_t calosigma[NTRACK]) {
     // constants
     const int DR2MAX_TE = PFALGO3_DR2MAX_TK_EM;
     const int DR2MAX_EH = PFALGO3_DR2MAX_EM_CALO;
 
     // initialize sum track pt
     pt_t calo_sumtk[NEMCALO];
-    for (int ic = 0; ic < NEMCALO; ++ic) {  calo_sumtk[ic] = 0; }
+    int ntks_calo[NEMCALO];
+    for (int ic = 0; ic < NEMCALO; ++ic) {  calo_sumtk[ic] = 0; ntks_calo[ic] = 0;}
     int tk2em[NTRACK]; 
     bool isEM[NEMCALO];
     // for each track, find the closest calo
@@ -98,6 +99,7 @@ void pfalgo3_em_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkObj 
             if (tk2em[it] != -1) {
                 if (g_debug_) printf("FW  \t track  %3d pt %7d matched to em calo %3d pt %7d\n", it, int(track[it].hwPt), tk2em[it], int(emcalo[tk2em[it]].hwPt));
                 calo_sumtk[tk2em[it]] += track[it].hwPt;
+                ntks_calo[tk2em[it]] += 1;
             }
         } else {
         	tk2em[it] = -1;
@@ -147,6 +149,7 @@ void pfalgo3_em_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkObj 
     for (int it = 0; it < NTRACK; ++it) {
         isEle[it] = (tk2em[it] != -1) && isEM[tk2em[it]];
         calomatch_pt[it] = emcalo[tk2em[it]].hwPt;
+        calosigma[it] = (isEle[it] && ntks_calo[tk2em[it]]==1) ? emcalo[tk2em[it]].hwPtErr : pt_t((1<<(calosigma[it].length()-1))-1);
         if (g_debug_ && isEle[it]) printf("FW  \t track  %3d pt %7d flagged as electron.\n", it, int(track[it].hwPt));
     }
 
@@ -270,7 +273,8 @@ void pfalgo3_full_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkOb
     bool isEle[NTRACK];
     HadCaloObj hadcalo_subem[NCALO];
     pt_t calomatch_pt[NTRACK];
-    pfalgo3_em_ref(emcalo, hadcalo, track, isEle, isMu, outpho, hadcalo_subem, calomatch_pt);
+    pt_t calosigma[NTRACK];
+    pfalgo3_em_ref(emcalo, hadcalo, track, isEle, isMu, outpho, hadcalo_subem, calomatch_pt, calosigma);
 
     ////////////////////////////////////////////////////
     // TK-HAD Linking
@@ -335,7 +339,7 @@ void pfalgo3_full_ref(EmCaloObj emcalo[NEMCALO], HadCaloObj hadcalo[NCALO], TkOb
     // copy out charged hadrons
     for (int it = 0; it < NTRACK; ++it) {
         if ((track_good[it] && !track_calo_good[it]) || (track_calo_good[it] && calomatch_pt[it]<=TRK_CALO_SWITCH)) {
-            outch[it].hwPt = track[it].hwPt;
+            outch[it].hwPt = (isEle[it] && calosigma[it] < track[it].hwPtErr) ? calomatch_pt[it] : track[it].hwPt;
             outch[it].hwEta = track[it].hwEta;
             outch[it].hwPhi = track[it].hwPhi;
             outch[it].hwZ0 = track[it].hwZ0;
